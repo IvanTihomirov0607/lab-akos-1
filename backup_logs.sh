@@ -46,11 +46,25 @@ if [ "$EXCEEDED" -eq 1 ]; then
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
     ARHIVE="/backup/log_backup_${TIMESTAMP}.tar.gz"
 
-    #Архивирование
-    tar -czf "$ARHIVE" -C "$LOG_DIR" "${OLD_FILES[@]/$LOG_DIR\//}"
+    #Архивирование с проверкой успеха
+    if tar -czf "$ARHIVE" -C "$LOG_DIR" "${OLD_FILES[@]/$LOG_DIR\//}"; then
+        echo "Архив создан: $ARHIVE"
+        echo "В архив вошло ${#OLD_FILES[@]} файлов"
 
-    echo "Архив создан: $ARHIVE"
-    echo "В архив вошло ${#OLD_FILES[@]} файлов"
+        #Удаление оригиналов после успешной архивации
+        DELETED=0
+        for file in "${OLD_FILES[@]}"; do
+            if rm -f "$file"; then
+                DELETED=$((DELETED + 1))
+            else
+                echo "Предупреждение: не удалось удалить '$file'"
+            fi
+        done
+        echo "Удалено оригиналов: $DELETED"
+    else
+        echo "Ошибка: не удалось создать архив. Файлы не тронуты."
+        exit 2
+    fi
 else
     echo "Порог не превышен и архивация не требуется"
 fi
