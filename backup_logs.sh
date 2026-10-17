@@ -86,4 +86,4 @@ if awk -v p="$PERCENT" -v t="$THRESHOLD" 'BEGIN {exit !(p >= t)}'; then
 else
     echo "Порог не превышен и архивация не требуется"
 fi
-exit o
+exit 0
