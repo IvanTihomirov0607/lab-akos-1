@@ -4,38 +4,36 @@ set -u
 BACKUP_DIR="/backup"
 
 usage() {
-    echo "Для использования нужно ввести - $0 путь к папке, порог %, кол-во файлов" >&2
-    echo "Пример - $0 /log 65 4" >&2
+    echo "Для использования нужно ввести - $0 путь к папке, лимит МБ, порог %, кол-во файлов" >&2
+    echo "Пример - $0 /log 100 65 4" >&2
 }
 
-if [ $# -ne 3 ]; then
+if [ $# -ne 4 ]; then
     usage
     exit 1
 fi
 
 LOG_DIR="$1"
-THRESHOLD="$2"
-NUM_FILES="$3"
+LIMIT_MB="$2"
+THRESHOLD="$3"
+NUM_FILES="$4"
 
-if ! [[ "$THRESHOLD" =~ ^[0-9]+([.][0-9]+)?$ ]] || ! [[ "$NUM_FILES" =~ ^[0-9]+$ ]]; then
-    echo "Ошибка - порог должен быть введен положительным числом!" >&2
-    echo "Ошибка - кол-во файлов должно быть введено целым положительным числом!" >&2
+if ! [[ "$LIMIT_MB" =~ ^[0-9]+([.][0-9]+)?$ ]] || ! [[ "$THRESHOLD" =~ ^[0-9]+([.][0-9]+)?$ ]] || ! [[ "$NUM_FILES" =~ ^[0-9]+$ ]]; then
+    echo "Ошибка - лимит и порог должны быть положительными числами!" >&2
+    echo "Ошибка - кол-во файлов должно быть целым положительным числом!" >&2
     exit 1
 fi
 
-#Проверка существования папки
 if [ ! -d "$LOG_DIR" ]; then
     echo "Ошибка - папка '$LOG_DIR' не существует" >&2
     exit 1
 fi
 
-#нахождение размеров и процента
 LOG_SIZE=$(du -sk "$LOG_DIR" | cut -f1)
-TOTAL_SIZE=$(df -k "$LOG_DIR" | tail -n 1 | awk '{print $2}')
 JUST_SIZE=$(du -sh "$LOG_DIR" | cut -f1)
 
-PERCENT=$(awk -v size="$LOG_SIZE" -v total="$TOTAL_SIZE" 'BEGIN {printf "%.2f", (size / total) * 100}')
-echo "Текущий размер папки '$LOG_DIR' : '$JUST_SIZE' (занято '$PERCENT'%, порог - '$THRESHOLD'%)"
+PERCENT=$(awk -v size="$LOG_SIZE" -v limit="$LIMIT_MB" 'BEGIN {printf "%.2f", (size / (limit * 1024)) * 100}')
+echo "Текущий размер папки '$LOG_DIR' : '$JUST_SIZE' (занято '$PERCENT'% от лимита $LIMIT_MB МБ, порог - '$THRESHOLD'%)"
 
 if awk -v p="$PERCENT" -v t="$THRESHOLD" 'BEGIN {exit !(p >= t)}'; then
     echo "Порог превышен, архивируем $NUM_FILES старых файлов"
@@ -46,22 +44,17 @@ if awk -v p="$PERCENT" -v t="$THRESHOLD" 'BEGIN {exit !(p >= t)}'; then
         exit 2
     fi
 
-    #Поиск M старых файлов
     mapfile -t OLD_FILES < <(find "$LOG_DIR" -type f -printf '%T@ %p\n' | sort -n | head -n "$NUM_FILES" | cut -d' ' -f2-)
 
-    #Проверка что файлы нашлись
     if [ ${#OLD_FILES[@]} -eq 0 ]; then
         echo "В папке нет файлов для архивации"
         exit 0
     fi
 
-    #Создаем архив
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
     ARCHIVE="${BACKUP_DIR}/log_backup_${TIMESTAMP}.tar.gz"
 
-    #Архивирование
     if tar -czf "$ARCHIVE" -C "$LOG_DIR" "${OLD_FILES[@]/$LOG_DIR\//}"; then
-
         if ! tar -tzf "$ARCHIVE" >/dev/null 2>&1; then
             echo "Ошибка - архив создан, но поврежден! Файлы не удалены." >&2
             exit 2
@@ -70,8 +63,7 @@ if awk -v p="$PERCENT" -v t="$THRESHOLD" 'BEGIN {exit !(p >= t)}'; then
         echo "Архив создан: $ARCHIVE"
         echo "В архив вошло ${#OLD_FILES[@]} файлов"
 
-        #Удаление оригиналов после успешной архивации
-        DELETED=0 #считаем кол-во уд файлов
+        DELETED=0
         for file in "${OLD_FILES[@]}"; do
             if rm -f "$file"; then
                 DELETED=$((DELETED + 1))
