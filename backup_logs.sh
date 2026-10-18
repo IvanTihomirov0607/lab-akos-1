@@ -17,8 +17,9 @@ LOG_DIR="$1"
 THRESHOLD="$2"
 NUM_FILES="$3"
 
-if ! [[ "$THRESHOLD" =~ ^[0-9]+$ ]] || ! [[ "$NUM_FILES" =~ ^[0-9]+$ ]]; then
-    echo "Ошибка - порог и кол-во файлов должны быть введены целыми положительными числами!" >&2
+if ! [[ "$THRESHOLD" =~ ^[0-9]+([.][0-9]+)?$ ]] || ! [[ "$NUM_FILES" =~ ^[0-9]+$ ]]; then
+    echo "Ошибка - порог должен быть введен положительным числом!" >&2
+    echo "Ошибка - кол-во файлов должно быть введено целым положительным числом!" >&2
     exit 1
 fi
 
@@ -45,7 +46,7 @@ if awk -v p="$PERCENT" -v t="$THRESHOLD" 'BEGIN {exit !(p >= t)}'; then
         exit 2
     fi
 
-    #Поиск М старых файлов
+    #Поиск M старых файлов
     mapfile -t OLD_FILES < <(find "$LOG_DIR" -type f -printf '%T@ %p\n' | sort -n | head -n "$NUM_FILES" | cut -d' ' -f2-)
 
     #Проверка что файлы нашлись
